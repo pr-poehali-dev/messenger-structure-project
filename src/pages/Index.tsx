@@ -21,6 +21,10 @@ interface Message {
   time: string;
   sent: boolean;
   read: boolean;
+  type?: 'text' | 'audio' | 'video';
+  duration?: number;
+  audioUrl?: string;
+  videoUrl?: string;
 }
 
 interface Chat {
@@ -38,7 +42,13 @@ const Index = () => {
   const [messageInput, setMessageInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const contacts: Contact[] = [
     { id: 1, name: 'Анна Соколова', avatar: '', status: 'online' },
@@ -103,6 +113,120 @@ const Index = () => {
     setMessageInput(prev => prev + emojiData.emoji);
   };
 
+  const startAudioRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        sendMediaMessage('audio', audioUrl, recordingTime);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecordingAudio(true);
+      setRecordingTime(0);
+      
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    } catch (error) {
+      console.error('Ошибка доступа к микрофону:', error);
+    }
+  };
+
+  const startVideoRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const videoBlob = new Blob(audioChunksRef.current, { type: 'video/webm' });
+        const videoUrl = URL.createObjectURL(videoBlob);
+        sendMediaMessage('video', videoUrl, recordingTime);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecordingVideo(true);
+      setRecordingTime(0);
+      
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    } catch (error) {
+      console.error('Ошибка доступа к камере:', error);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+    }
+    setIsRecordingAudio(false);
+    setIsRecordingVideo(false);
+  };
+
+  const sendMediaMessage = (type: 'audio' | 'video', url: string, duration: number) => {
+    if (selectedChat) {
+      const now = new Date();
+      const timeString = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+      
+      const newMessage: Message = {
+        id: Date.now(),
+        text: type === 'audio' ? '🎤 Голосовое сообщение' : '🎥 Видео-кружок',
+        time: timeString,
+        sent: true,
+        read: false,
+        type,
+        duration,
+        audioUrl: type === 'audio' ? url : undefined,
+        videoUrl: type === 'video' ? url : undefined,
+      };
+
+      setChats(prevChats => 
+        prevChats.map(chat => {
+          if (chat.id === selectedChat) {
+            return {
+              ...chat,
+              messages: [...chat.messages, newMessage],
+              lastMessage: newMessage.text,
+              time: timeString,
+            };
+          }
+          return chat;
+        })
+      );
+    }
+  };
+
+  const formatRecordingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handleSendMessage = () => {
     if (messageInput.trim() && selectedChat) {
       const now = new Date();
@@ -114,6 +238,7 @@ const Index = () => {
         time: timeString,
         sent: true,
         read: false,
+        type: 'text',
       };
 
       setChats(prevChats => 
@@ -372,13 +497,52 @@ const Index = () => {
                   className={`flex ${message.sent ? 'justify-end' : 'justify-start'} animate-fade-in`}
                 >
                   <div
-                    className={`max-w-md px-4 py-2 rounded-2xl ${
+                    className={`${message.type === 'video' ? 'max-w-xs' : 'max-w-md'} px-4 py-2 rounded-2xl ${
                       message.sent
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-card border'
                     }`}
                   >
-                    <p className="text-sm">{message.text}</p>
+                    {message.type === 'audio' && message.audioUrl && (
+                      <div className="flex items-center gap-3">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-10 w-10 rounded-full"
+                          onClick={() => {
+                            const audio = new Audio(message.audioUrl);
+                            audio.play();
+                          }}
+                        >
+                          <Icon name="Play" size={20} />
+                        </Button>
+                        <div className="flex-1">
+                          <div className="h-1 bg-current opacity-20 rounded-full" />
+                        </div>
+                        <span className="text-xs opacity-70">
+                          {formatRecordingTime(message.duration || 0)}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {message.type === 'video' && message.videoUrl && (
+                      <div>
+                        <video 
+                          src={message.videoUrl} 
+                          controls 
+                          className="w-full rounded-lg mb-2"
+                          style={{ maxWidth: '200px', maxHeight: '200px' }}
+                        />
+                        <span className="text-xs opacity-70">
+                          {formatRecordingTime(message.duration || 0)}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {message.type === 'text' && (
+                      <p className="text-sm">{message.text}</p>
+                    )}
+                    
                     <div className="flex items-center justify-end gap-1 mt-1">
                       <span className={`text-xs ${message.sent ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                         {message.time}
@@ -397,50 +561,85 @@ const Index = () => {
             </div>
 
             <div className="border-t bg-card p-4">
-              <div className="flex items-end gap-3">
-                <Button variant="ghost" size="icon" className="rounded-lg">
-                  <Icon name="Plus" size={22} />
-                </Button>
-                
-                <div className="flex-1 relative">
-                  <Input
-                    placeholder="Написать сообщение..."
-                    value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                    className="pr-20"
-                  />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                    <div className="relative" ref={emojiPickerRef}>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8"
-                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                      >
-                        <Icon name="Smile" size={20} />
-                      </Button>
-                      {showEmojiPicker && (
-                        <div className="absolute bottom-12 right-0 z-50">
-                          <EmojiPicker onEmojiClick={handleEmojiClick} />
-                        </div>
-                      )}
-                    </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <Icon name="Paperclip" size={20} />
-                    </Button>
+              {(isRecordingAudio || isRecordingVideo) ? (
+                <div className="flex items-center gap-4 justify-center">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                    <span className="text-sm font-medium">{formatRecordingTime(recordingTime)}</span>
                   </div>
+                  <Button 
+                    variant="destructive" 
+                    size="icon" 
+                    className="rounded-full"
+                    onClick={stopRecording}
+                  >
+                    <Icon name="Square" size={20} />
+                  </Button>
                 </div>
-                
-                <Button 
-                  size="icon" 
-                  className="rounded-lg"
-                  onClick={handleSendMessage}
-                  disabled={!messageInput.trim()}
-                >
-                  <Icon name="Send" size={20} />
-                </Button>
-              </div>
+              ) : (
+                <div className="flex items-end gap-3">
+                  <Button variant="ghost" size="icon" className="rounded-lg">
+                    <Icon name="Plus" size={22} />
+                  </Button>
+                  
+                  <div className="flex-1 relative">
+                    <Input
+                      placeholder="Написать сообщение..."
+                      value={messageInput}
+                      onChange={(e) => setMessageInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                      className="pr-20"
+                    />
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                      <div className="relative" ref={emojiPickerRef}>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8"
+                          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                        >
+                          <Icon name="Smile" size={20} />
+                        </Button>
+                        {showEmojiPicker && (
+                          <div className="absolute bottom-12 right-0 z-50">
+                            <EmojiPicker onEmojiClick={handleEmojiClick} />
+                          </div>
+                        )}
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Icon name="Paperclip" size={20} />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {messageInput.trim() ? (
+                    <Button 
+                      size="icon" 
+                      className="rounded-lg"
+                      onClick={handleSendMessage}
+                    >
+                      <Icon name="Send" size={20} />
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button 
+                        size="icon" 
+                        className="rounded-lg"
+                        onClick={startAudioRecording}
+                      >
+                        <Icon name="Mic" size={20} />
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        className="rounded-lg bg-gradient-to-br from-primary to-blue-600"
+                        onClick={startVideoRecording}
+                      >
+                        <Icon name="Video" size={20} />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </>
         ) : (
