@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 
 interface Contact {
   id: number;
@@ -36,6 +37,8 @@ const Index = () => {
   const [selectedChat, setSelectedChat] = useState<number | null>(1);
   const [messageInput, setMessageInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
 
   const contacts: Contact[] = [
     { id: 1, name: 'Анна Соколова', avatar: '', status: 'online' },
@@ -85,6 +88,21 @@ const Index = () => {
 
   const currentChat = chats.find(chat => chat.id === selectedChat);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    setMessageInput(prev => prev + emojiData.emoji);
+  };
+
   const handleSendMessage = () => {
     if (messageInput.trim() && selectedChat) {
       const now = new Date();
@@ -113,6 +131,7 @@ const Index = () => {
       );
 
       setMessageInput('');
+      setShowEmojiPicker(false);
     }
   };
 
@@ -392,9 +411,21 @@ const Index = () => {
                     className="pr-20"
                   />
                   <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <Icon name="Smile" size={20} />
-                    </Button>
+                    <div className="relative" ref={emojiPickerRef}>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8"
+                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                      >
+                        <Icon name="Smile" size={20} />
+                      </Button>
+                      {showEmojiPicker && (
+                        <div className="absolute bottom-12 right-0 z-50">
+                          <EmojiPicker onEmojiClick={handleEmojiClick} />
+                        </div>
+                      )}
+                    </div>
                     <Button variant="ghost" size="icon" className="h-8 w-8">
                       <Icon name="Paperclip" size={20} />
                     </Button>
