@@ -15,6 +15,7 @@ interface SidebarProps {
   contacts: Contact[];
   selectedChat: number | null;
   setSelectedChat: (id: number | null) => void;
+  onShowStorage?: () => void;
 }
 
 const Sidebar = ({
@@ -26,6 +27,7 @@ const Sidebar = ({
   contacts,
   selectedChat,
   setSelectedChat,
+  onShowStorage,
 }: SidebarProps) => {
   return (
     <>
@@ -207,7 +209,11 @@ const Sidebar = ({
                 <Icon name="Palette" size={20} className="mr-3" />
                 Оформление
               </Button>
-              <Button variant="ghost" className="w-full justify-start">
+              <Button 
+                variant="ghost" 
+                className="w-full justify-start"
+                onClick={onShowStorage}
+              >
                 <Icon name="HardDrive" size={20} className="mr-3" />
                 Данные и память
               </Button>

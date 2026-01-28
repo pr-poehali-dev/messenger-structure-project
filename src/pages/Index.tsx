@@ -2,10 +2,12 @@ import { useState, useRef } from 'react';
 import Sidebar from '@/components/Sidebar';
 import ChatWindow from '@/components/ChatWindow';
 import MessageInput from '@/components/MessageInput';
+import StorageView from '@/components/StorageView';
 import { Chat, Contact, Message } from '@/types/chat';
 
 const Index = () => {
   const [activeView, setActiveView] = useState<'chats' | 'contacts' | 'profile' | 'settings'>('chats');
+  const [showStorageView, setShowStorageView] = useState(false);
   const [selectedChat, setSelectedChat] = useState<number | null>(1);
   const [messageInput, setMessageInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -321,61 +323,73 @@ const Index = () => {
 
   return (
     <div className="h-screen flex bg-muted/30">
-      <Sidebar
-        activeView={activeView}
-        setActiveView={setActiveView}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        chats={chats}
-        contacts={contacts}
-        selectedChat={selectedChat}
-        setSelectedChat={setSelectedChat}
-      />
-
-      <div className="flex-1 flex flex-col bg-background">
-        {currentChat ? (
-          <>
-            <ChatWindow
-              currentChat={currentChat}
-              formatRecordingTime={formatRecordingTime}
-              handleVotePoll={handleVotePoll}
-            />
-            <MessageInput
-              messageInput={messageInput}
-              setMessageInput={setMessageInput}
-              handleSendMessage={handleSendMessage}
-              showEmojiPicker={showEmojiPicker}
-              setShowEmojiPicker={setShowEmojiPicker}
-              isRecordingAudio={isRecordingAudio}
-              isRecordingVideo={isRecordingVideo}
-              recordingTime={recordingTime}
-              stopRecording={stopRecording}
-              startAudioRecording={startAudioRecording}
-              startVideoRecording={startVideoRecording}
-              formatRecordingTime={formatRecordingTime}
-              showAttachMenu={showAttachMenu}
-              setShowAttachMenu={setShowAttachMenu}
-              showPollCreator={showPollCreator}
-              setShowPollCreator={setShowPollCreator}
-              pollQuestion={pollQuestion}
-              setPollQuestion={setPollQuestion}
-              pollOptions={pollOptions}
-              setPollOptions={setPollOptions}
-              handleCreatePoll={handleCreatePoll}
-              handleFileSelect={handleFileSelect}
-              emojiPickerRef={emojiPickerRef}
-              attachMenuRef={attachMenuRef}
-              fileInputRef={fileInputRef}
-            />
-          </>
-        ) : (
-          <ChatWindow
-            currentChat={undefined}
-            formatRecordingTime={formatRecordingTime}
-            handleVotePoll={handleVotePoll}
+      {!showStorageView ? (
+        <>
+          <Sidebar
+            activeView={activeView}
+            setActiveView={setActiveView}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            chats={chats}
+            contacts={contacts}
+            selectedChat={selectedChat}
+            setSelectedChat={setSelectedChat}
+            onShowStorage={() => setShowStorageView(true)}
           />
-        )}
-      </div>
+
+          <div className="flex-1 flex flex-col bg-background">
+            {currentChat ? (
+              <>
+                <ChatWindow
+                  currentChat={currentChat}
+                  formatRecordingTime={formatRecordingTime}
+                  handleVotePoll={handleVotePoll}
+                />
+                <MessageInput
+                  messageInput={messageInput}
+                  setMessageInput={setMessageInput}
+                  handleSendMessage={handleSendMessage}
+                  showEmojiPicker={showEmojiPicker}
+                  setShowEmojiPicker={setShowEmojiPicker}
+                  isRecordingAudio={isRecordingAudio}
+                  isRecordingVideo={isRecordingVideo}
+                  recordingTime={recordingTime}
+                  stopRecording={stopRecording}
+                  startAudioRecording={startAudioRecording}
+                  startVideoRecording={startVideoRecording}
+                  formatRecordingTime={formatRecordingTime}
+                  showAttachMenu={showAttachMenu}
+                  setShowAttachMenu={setShowAttachMenu}
+                  showPollCreator={showPollCreator}
+                  setShowPollCreator={setShowPollCreator}
+                  pollQuestion={pollQuestion}
+                  setPollQuestion={setPollQuestion}
+                  pollOptions={pollOptions}
+                  setPollOptions={setPollOptions}
+                  handleCreatePoll={handleCreatePoll}
+                  handleFileSelect={handleFileSelect}
+                  emojiPickerRef={emojiPickerRef}
+                  attachMenuRef={attachMenuRef}
+                  fileInputRef={fileInputRef}
+                />
+              </>
+            ) : (
+              <ChatWindow
+                currentChat={undefined}
+                formatRecordingTime={formatRecordingTime}
+                handleVotePoll={handleVotePoll}
+              />
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="w-full max-w-2xl mx-auto bg-card">
+          <StorageView 
+            chats={chats} 
+            onBack={() => setShowStorageView(false)} 
+          />
+        </div>
+      )}
     </div>
   );
 };
