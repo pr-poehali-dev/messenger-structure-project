@@ -44,7 +44,7 @@ const Index = () => {
     { id: 4, name: 'Михаил Зайцев', avatar: '', status: 'offline', lastSeen: 'вчера' },
   ];
 
-  const chats: Chat[] = [
+  const [chats, setChats] = useState<Chat[]>([
     {
       id: 1,
       contact: contacts[0],
@@ -81,12 +81,37 @@ const Index = () => {
         { id: 3, text: 'Спасибо за помощь! 🙏', time: 'Вчера', sent: false, read: true },
       ],
     },
-  ];
+  ]);
 
   const currentChat = chats.find(chat => chat.id === selectedChat);
 
   const handleSendMessage = () => {
-    if (messageInput.trim()) {
+    if (messageInput.trim() && selectedChat) {
+      const now = new Date();
+      const timeString = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+      
+      const newMessage: Message = {
+        id: Date.now(),
+        text: messageInput.trim(),
+        time: timeString,
+        sent: true,
+        read: false,
+      };
+
+      setChats(prevChats => 
+        prevChats.map(chat => {
+          if (chat.id === selectedChat) {
+            return {
+              ...chat,
+              messages: [...chat.messages, newMessage],
+              lastMessage: newMessage.text,
+              time: timeString,
+            };
+          }
+          return chat;
+        })
+      );
+
       setMessageInput('');
     }
   };
