@@ -15,16 +15,28 @@ interface Contact {
   lastSeen?: string;
 }
 
+interface PollOption {
+  id: number;
+  text: string;
+  votes: number;
+}
+
 interface Message {
   id: number;
   text: string;
   time: string;
   sent: boolean;
   read: boolean;
-  type?: 'text' | 'audio' | 'video';
+  type?: 'text' | 'audio' | 'video' | 'file' | 'poll';
   duration?: number;
   audioUrl?: string;
   videoUrl?: string;
+  fileName?: string;
+  fileSize?: string;
+  fileUrl?: string;
+  pollQuestion?: string;
+  pollOptions?: PollOption[];
+  userVote?: number;
 }
 
 interface Chat {
@@ -45,7 +57,13 @@ const Index = () => {
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [isRecordingVideo, setIsRecordingVideo] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showPollCreator, setShowPollCreator] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const attachMenuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -102,6 +120,9 @@ const Index = () => {
     const handleClickOutside = (event: MouseEvent) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
         setShowEmojiPicker(false);
+      }
+      if (attachMenuRef.current && !attachMenuRef.current.contains(event.target as Node)) {
+        setShowAttachMenu(false);
       }
     };
 
@@ -225,6 +246,106 @@ const Index = () => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && selectedChat) {
+      const now = new Date();
+      const timeString = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+      
+      const fileUrl = URL.createObjectURL(file);
+      const fileSize = file.size < 1024 * 1024 
+        ? `${(file.size / 1024).toFixed(1)} КБ` 
+        : `${(file.size / (1024 * 1024)).toFixed(1)} МБ`;
+
+      const newMessage: Message = {
+        id: Date.now(),
+        text: file.name,
+        time: timeString,
+        sent: true,
+        read: false,
+        type: 'file',
+        fileName: file.name,
+        fileSize,
+        fileUrl,
+      };
+
+      setChats(prevChats => 
+        prevChats.map(chat => {
+          if (chat.id === selectedChat) {
+            return {
+              ...chat,
+              messages: [...chat.messages, newMessage],
+              lastMessage: `📎 ${file.name}`,
+              time: timeString,
+            };
+          }
+          return chat;
+        })
+      );
+      setShowAttachMenu(false);
+    }
+  };
+
+  const handleCreatePoll = () => {
+    if (pollQuestion.trim() && pollOptions.filter(o => o.trim()).length >= 2 && selectedChat) {
+      const now = new Date();
+      const timeString = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+      
+      const validOptions = pollOptions
+        .filter(o => o.trim())
+        .map((text, index) => ({ id: index, text, votes: 0 }));
+
+      const newMessage: Message = {
+        id: Date.now(),
+        text: pollQuestion,
+        time: timeString,
+        sent: true,
+        read: false,
+        type: 'poll',
+        pollQuestion: pollQuestion,
+        pollOptions: validOptions,
+      };
+
+      setChats(prevChats => 
+        prevChats.map(chat => {
+          if (chat.id === selectedChat) {
+            return {
+              ...chat,
+              messages: [...chat.messages, newMessage],
+              lastMessage: `📊 ${pollQuestion}`,
+              time: timeString,
+            };
+          }
+          return chat;
+        })
+      );
+
+      setPollQuestion('');
+      setPollOptions(['', '']);
+      setShowPollCreator(false);
+    }
+  };
+
+  const handleVotePoll = (messageId: number, optionId: number) => {
+    setChats(prevChats => 
+      prevChats.map(chat => ({
+        ...chat,
+        messages: chat.messages.map(msg => {
+          if (msg.id === messageId && msg.type === 'poll' && msg.pollOptions) {
+            return {
+              ...msg,
+              userVote: optionId,
+              pollOptions: msg.pollOptions.map(opt => 
+                opt.id === optionId ? { ...opt, votes: opt.votes + 1 } : opt
+              ),
+            };
+          }
+          return msg;
+        }),
+      }))
+    );
   };
 
   const handleSendMessage = () => {
@@ -539,6 +660,80 @@ const Index = () => {
                       </div>
                     )}
                     
+                    {message.type === 'file' && message.fileName && (
+                      <div className="flex items-center gap-3">
+                        <div className="flex-shrink-0 w-12 h-12 bg-current opacity-10 rounded-lg flex items-center justify-center">
+                          <Icon name="FileText" size={24} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{message.fileName}</p>
+                          <p className="text-xs opacity-70">{message.fileSize}</p>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="flex-shrink-0"
+                          onClick={() => {
+                            if (message.fileUrl) {
+                              const link = document.createElement('a');
+                              link.href = message.fileUrl;
+                              link.download = message.fileName || 'file';
+                              link.click();
+                            }
+                          }}
+                        >
+                          <Icon name="Download" size={20} />
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {message.type === 'poll' && message.pollOptions && (
+                      <div className="space-y-3 min-w-[250px]">
+                        <p className="font-medium">{message.pollQuestion}</p>
+                        <div className="space-y-2">
+                          {message.pollOptions.map((option) => {
+                            const totalVotes = message.pollOptions?.reduce((sum, opt) => sum + opt.votes, 0) || 0;
+                            const percentage = totalVotes > 0 ? (option.votes / totalVotes) * 100 : 0;
+                            const isVoted = message.userVote === option.id;
+                            
+                            return (
+                              <button
+                                key={option.id}
+                                onClick={() => !message.userVote && handleVotePoll(message.id, option.id)}
+                                disabled={!!message.userVote}
+                                className={`w-full text-left p-2 rounded-lg transition-colors relative overflow-hidden ${
+                                  message.userVote 
+                                    ? 'cursor-default' 
+                                    : 'hover:bg-current hover:bg-opacity-10 cursor-pointer'
+                                }`}
+                              >
+                                {message.userVote && (
+                                  <div 
+                                    className="absolute inset-0 bg-current opacity-10 transition-all duration-300"
+                                    style={{ width: `${percentage}%` }}
+                                  />
+                                )}
+                                <div className="relative flex items-center justify-between">
+                                  <span className="text-sm flex items-center gap-2">
+                                    {isVoted && <Icon name="Check" size={16} />}
+                                    {option.text}
+                                  </span>
+                                  {message.userVote && (
+                                    <span className="text-xs opacity-70">{percentage.toFixed(0)}%</span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {message.userVote && (
+                          <p className="text-xs opacity-70">
+                            Всего голосов: {message.pollOptions.reduce((sum, opt) => sum + opt.votes, 0)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
                     {message.type === 'text' && (
                       <p className="text-sm">{message.text}</p>
                     )}
@@ -576,11 +771,120 @@ const Index = () => {
                     <Icon name="Square" size={20} />
                   </Button>
                 </div>
+              ) : showPollCreator ? (
+                <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">Создать опрос</h3>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => {
+                        setShowPollCreator(false);
+                        setPollQuestion('');
+                        setPollOptions(['', '']);
+                      }}
+                    >
+                      <Icon name="X" size={20} />
+                    </Button>
+                  </div>
+                  
+                  <Input
+                    placeholder="Вопрос опроса"
+                    value={pollQuestion}
+                    onChange={(e) => setPollQuestion(e.target.value)}
+                  />
+                  
+                  <div className="space-y-2">
+                    {pollOptions.map((option, index) => (
+                      <div key={index} className="flex gap-2">
+                        <Input
+                          placeholder={`Вариант ${index + 1}`}
+                          value={option}
+                          onChange={(e) => {
+                            const newOptions = [...pollOptions];
+                            newOptions[index] = e.target.value;
+                            setPollOptions(newOptions);
+                          }}
+                        />
+                        {pollOptions.length > 2 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== index))}
+                          >
+                            <Icon name="X" size={18} />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPollOptions([...pollOptions, ''])}
+                      disabled={pollOptions.length >= 10}
+                    >
+                      <Icon name="Plus" size={16} className="mr-2" />
+                      Добавить вариант
+                    </Button>
+                    
+                    <Button
+                      size="sm"
+                      onClick={handleCreatePoll}
+                      disabled={!pollQuestion.trim() || pollOptions.filter(o => o.trim()).length < 2}
+                    >
+                      Отправить опрос
+                    </Button>
+                  </div>
+                </div>
               ) : (
                 <div className="flex items-end gap-3">
-                  <Button variant="ghost" size="icon" className="rounded-lg">
-                    <Icon name="Plus" size={22} />
-                  </Button>
+                  <div className="relative" ref={attachMenuRef}>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="rounded-lg"
+                      onClick={() => setShowAttachMenu(!showAttachMenu)}
+                    >
+                      <Icon name="Plus" size={22} />
+                    </Button>
+                    
+                    {showAttachMenu && (
+                      <div className="absolute bottom-14 left-0 bg-card border rounded-lg shadow-lg p-2 space-y-1 min-w-[180px] z-50">
+                        <Button 
+                          variant="ghost" 
+                          className="w-full justify-start"
+                          onClick={() => {
+                            fileInputRef.current?.click();
+                            setShowAttachMenu(false);
+                          }}
+                        >
+                          <Icon name="FileText" size={18} className="mr-2" />
+                          Файл
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          className="w-full justify-start"
+                          onClick={() => {
+                            setShowPollCreator(true);
+                            setShowAttachMenu(false);
+                          }}
+                        >
+                          <Icon name="BarChart3" size={18} className="mr-2" />
+                          Опрос
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileSelect}
+                  />
                   
                   <div className="flex-1 relative">
                     <Input
@@ -606,9 +910,6 @@ const Index = () => {
                           </div>
                         )}
                       </div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <Icon name="Paperclip" size={20} />
-                      </Button>
                     </div>
                   </div>
                   
